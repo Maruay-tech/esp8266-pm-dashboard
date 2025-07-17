@@ -1,82 +1,59 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8">
   <title>ESP8266 PM2230 Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f6f8fa; }
-    h1 { margin: 20px; color: #333; }
-    .container { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; padding: 20px; }
-    .card {
-      background: linear-gradient(135deg, #fc466b, #3f5efb);
-      padding: 15px 20px;
-      border-radius: 12px;
-      color: white;
-      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-    }
-    .card h2 { font-size: 18px; margin: 0 0 10px; }
-    .item { display: flex; justify-content: space-between; padding: 2px 0; font-size: 15px; }
-    .blue { background: linear-gradient(to right, #00c6ff, #0072ff); }
-    .orange { background: linear-gradient(to right, #f7971e, #ffd200); }
-    .green { background: linear-gradient(to right, #43cea2, #185a9d); }
-    .gray { background: linear-gradient(to right, #757f9a, #d7dde8); color: black; }
-    .relay { padding: 10px; background: #444; color: white; text-align: center; border-radius: 8px; margin: 0 20px; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; text-align: center; }
+    .container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 10px; }
+    canvas { margin: 30px 0; }
   </style>
 </head>
 <body>
-  <h1>📟 ESP8266 PM2230 Dashboard</h1>
-  <div class="relay" id="relay">Relay: OFF</div>
   <div class="container">
-    <div class="card orange">
-      <h2>Voltage L-L</h2>
-      <div class="item"><span>Voltage LL1</span><span id="v12">--.--</span></div>
-      <div class="item"><span>Voltage LL2</span><span id="v23">--.--</span></div>
-      <div class="item"><span>Voltage LL3</span><span id="v31">--.--</span></div>
-    </div>
-    <div class="card orange">
-      <h2>Voltage L-N</h2>
-      <div class="item"><span>Voltage LN1</span><span id="v1n">--.--</span></div>
-      <div class="item"><span>Voltage LN2</span><span id="v2n">--.--</span></div>
-      <div class="item"><span>Voltage LN3</span><span id="v3n">--.--</span></div>
-    </div>
-    <div class="card blue">
-      <h2>Total Variable</h2>
-      <div class="item"><span>Frequency</span><span id="freq">--.-- Hz</span></div>
-      <div class="item"><span>Total PF</span><span id="pf">--.--</span></div>
-    </div>
-    <div class="card gray">
-      <h2>Voltage Avg</h2>
-      <div class="item"><span>LN Avg</span><span id="vavg">--.--</span></div>
-      <div class="item"><span>LL Avg</span><span id="vllavg">--.--</span></div>
-    </div>
+    <h2>ESP8266 PM2230 Voltage Dashboard</h2>
+    <canvas id="lnChart"></canvas>
+    <canvas id="llChart"></canvas>
   </div>
-
   <script>
-    function safe(v) {
-      return (v === -9999 || v == null) ? '--.--' : v.toFixed(2);
+    const lnCtx = document.getElementById('lnChart').getContext('2d');
+    const llCtx = document.getElementById('llChart').getContext('2d');
+    const lnChart = new Chart(lnCtx, {
+      type: 'bar',
+      data: {
+        labels: ['L1-N', 'L2-N', 'L3-N', 'L-N Avg'],
+        datasets: [{
+          label: 'Voltage L-N',
+          backgroundColor: '#4caf50',
+          data: [0, 0, 0, 0]
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true, max: 260 } } }
+    });
+    const llChart = new Chart(llCtx, {
+      type: 'bar',
+      data: {
+        labels: ['L1-L2', 'L2-L3', 'L3-L1', 'L-L Avg'],
+        datasets: [{
+          label: 'Voltage L-L',
+          backgroundColor: '#2196f3',
+          data: [0, 0, 0, 0]
+        }]
+      },
+      options: { scales: { y: { beginAtZero: true, max: 460 } } }
+    });
+
+    async function fetchData() {
+      try {
+        const res = await fetch('https://raw.githubusercontent.com/Maruay-tech/esp8266-pm-dashboard/main/data/data.json');
+        const json = await res.json();
+        lnChart.data.datasets[0].data = [json.v1n, json.v2n, json.v3n, json.vavg];
+        llChart.data.datasets[0].data = [json.v12, json.v23, json.v31, json.vllavg];
+        lnChart.update(); llChart.update();
+      } catch (e) { console.error(e); }
     }
-    function update() {
-      fetch('/data')
-        .then(res => res.json())
-        .then(data => {
-          document.getElementById('v1n').textContent = safe(data.v1n);
-          document.getElementById('v2n').textContent = safe(data.v2n);
-          document.getElementById('v3n').textContent = safe(data.v3n);
-          document.getElementById('v12').textContent = safe(data.v12);
-          document.getElementById('v23').textContent = safe(data.v23);
-          document.getElementById('v31').textContent = safe(data.v31);
-          document.getElementById('vavg').textContent = safe(data.vavg);
-          document.getElementById('vllavg').textContent = safe(data.vllavg);
-          document.getElementById('relay').textContent = "Relay: " + data.relay;
-          if (data.freq !== undefined) document.getElementById('freq').textContent = safe(data.freq) + " Hz";
-          if (data.pf !== undefined) document.getElementById('pf').textContent = safe(data.pf);
-        });
-    }
-    setInterval(update, 3000);
-    update();
+    fetchData(); setInterval(fetchData, 5000);
   </script>
 </body>
 </html>
